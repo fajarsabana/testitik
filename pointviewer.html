@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Point Grouping Tool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        .marker-label {
+            background-color: white;
+            padding: 2px 4px;
+            border-radius: 4px;
+            border: 1px solid #aaa;
+            font-size: 10px;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            z-index: 1000;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <label for="group">Select Group:</label>
+    <select id="group">
+        <option value="A">Polygon A</option>
+        <option value="B">Polygon B</option>
+        <option value="C">Polygon C</option>
+    </select>
+    <button onclick="exportGeoJSON()">Export GeoJSON</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const points = [
+        [107.1195778, -6.2925],
+        [107.1195806, -6.287086111],
+        [107.1233889, -6.287227778],
+        [107.1234139, -6.280208333]
+        // Add more points here
+    ];
+
+    const map = L.map('map').setView([-6.29, 107.12], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    const groupColors = { A: 'red', B: 'blue', C: 'green' };
+    const pointMarkers = [];
+    const groupedPoints = { A: [], B: [], C: [] };
+
+    points.forEach((point, index) => {
+        const marker = L.marker([point[1], point[0]], { draggable: false }).addTo(map);
+        marker.bindTooltip(`${index + 1}`, {
+            permanent: true,
+            direction: 'top',
+            className: 'marker-label'
+        }).openTooltip();
+        marker.index = index;
+        marker.group = null;
+        marker.on('click', function () {
+            const selectedGroup = document.getElementById('group').value;
+            if (this.group) {
+                // Remove from previous group
+                groupedPoints[this.group] = groupedPoints[this.group].filter(m => m.index !== this.index);
+            }
+            this.group = selectedGroup;
+            this.setIcon(new L.Icon.Default({
+                iconUrl: `https://chart.googleapis.com/chart?chst=d_map_pin_letter&chld=${this.index+1}|${groupColors[selectedGroup].replace('#','')}`
+            }));
+            groupedPoints[selectedGroup].push(this);
+        });
+        pointMarkers.push(marker);
+    });
+
+    function exportGeoJSON() {
+        const features = [];
+        for (const group in groupedPoints) {
+            if (groupedPoints[group].length > 2) {
+                const coords = groupedPoints[group].map(m => [m.getLatLng().lng, m.getLatLng().lat]);
+                coords.push(coords[0]); // Close the polygon
+                features.push({
+                    type: 'Feature',
+                    properties: { group },
+                    geometry: {
+                        type: 'Polygon',
+                        coordinates: [coords]
+                    }
+                });
+            }
+        }
+
+        const geojson = {
+            type: 'FeatureCollection',
+            features
+        };
+
+        const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'grouped_polygons.geojson';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+</script>
+
+</body>
+</html>
